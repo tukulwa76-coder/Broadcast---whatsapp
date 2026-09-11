@@ -50,11 +50,16 @@ async function requestPairingCodeWithRetry(sock, phoneNumber, maxAttempts = 5) {
   }
 }
 
+let sessionResetDone = false;
+
 async function startBot() {
   // Kalau RESET_SESSION=true di environment variable, hapus folder session
   // dulu sebelum connect. Dipakai buat "paksa" pairing ulang di Railway,
   // karena di sana tidak ada terminal untuk hapus folder manual.
-  if (process.env.RESET_SESSION === "true") {
+  // Hanya dijalankan SEKALI per proses — reconnect otomatis (dari koneksi
+  // putus) tidak boleh ikut menghapus session yang baru saja berhasil login.
+  if (process.env.RESET_SESSION === "true" && !sessionResetDone) {
+    sessionResetDone = true;
     const sessionPath = `./session/${config.SESSION_NAME}`;
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
