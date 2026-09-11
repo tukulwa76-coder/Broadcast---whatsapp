@@ -1,0 +1,6 @@
+{
+  "enabled": false,
+  "intervalMinutes": 60,
+  "target": "all",
+  "message": ""
+}
