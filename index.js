@@ -6,6 +6,7 @@ const {
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const readline = require("readline");
+const fs = require("fs");
 const config = require("./config");
 const { handleCommand } = require("./lib/commands");
 const { readJSON } = require("./lib/store");
@@ -50,6 +51,17 @@ async function requestPairingCodeWithRetry(sock, phoneNumber, maxAttempts = 5) {
 }
 
 async function startBot() {
+  // Kalau RESET_SESSION=true di environment variable, hapus folder session
+  // dulu sebelum connect. Dipakai buat "paksa" pairing ulang di Railway,
+  // karena di sana tidak ada terminal untuk hapus folder manual.
+  if (process.env.RESET_SESSION === "true") {
+    const sessionPath = `./session/${config.SESSION_NAME}`;
+    if (fs.existsSync(sessionPath)) {
+      fs.rmSync(sessionPath, { recursive: true, force: true });
+      console.log("🗑️ Folder session dihapus (RESET_SESSION=true). Akan minta pairing baru.");
+    }
+  }
+
   const { state, saveCreds } = await useMultiFileAuthState(`./session/${config.SESSION_NAME}`);
   const { version } = await fetchLatestBaileysVersion();
 
