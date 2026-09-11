@@ -30,6 +30,25 @@ async function askPhoneNumber() {
   return phoneNumber.trim();
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestPairingCodeWithRetry(sock, phoneNumber, maxAttempts = 5) {
+  // Jeda awal 3 detik supaya websocket sempat konek dulu ke server WhatsApp
+  await sleep(3000);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await sock.requestPairingCode(phoneNumber);
+    } catch (err) {
+      console.log(`⚠️ Gagal minta kode pairing (percobaan ${attempt}/${maxAttempts}): ${err.message}`);
+      if (attempt === maxAttempts) throw err;
+      await sleep(4000); // jeda sebelum coba lagi
+    }
+  }
+}
+
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(`./session/${config.SESSION_NAME}`);
   const { version } = await fetchLatestBaileysVersion();
@@ -44,7 +63,11 @@ async function startBot() {
   // --- Login via pairing code (bukan QR) ---
   if (!sock.authState.creds.registered) {
     const phoneNumber = await askPhoneNumber();
-    const code = await sock.requestPairingCode(phoneNumber);
+
+    // requestPairingCode sering gagal "Connection Closed" kalau dipanggil
+    // terlalu cepat, sebelum websocket ke server WA benar-benar siap.
+    // Kasih jeda awal + retry beberapa kali.
+    const code = await requestPairingCodeWithRetry(sock, phoneNumber);
     console.log(`\n🔗 Kode pairing kamu: ${code}\n`);
     console.log("Buka WhatsApp > Perangkat Tertaut > Tautkan dengan nomor telepon, lalu masukkan kode di atas.\n");
     setPairingCode(code);
@@ -143,5 +166,15 @@ function startAutoBroadcastScheduler(sock) {
 }
 
 startWebServer();
-startBot();
 
+async function bootWithRetry() {
+  try {
+    await startBot();
+  } catch (err) {
+    console.error("❌ Gagal start bot:", err.message);
+    console.log("🔄 Coba ulang dalam 10 detik...");
+    setTimeout(bootWithRetry, 10 * 1000);
+  }
+}
+
+bootWithRetry();
